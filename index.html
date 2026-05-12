@@ -151,9 +151,42 @@
             state.transactions.filter(t => t.type === 'expense').forEach(t => {
                 const d = new Date(t.date);
                 if(d.getMonth() === currMonth && d.getFullYear() === currYear) {
-                    stats[t.categoryId] = (stats[t.categoryId] || 0) + t.amount;
+                    if (!stats[t.categoryId]) {
+                        stats[t.categoryId] = {
+                            totalAmount: 0,
+                            walletBreakdown: {} // Track spending by wallet within the category
+                        };
+                    }
+                    stats[t.categoryId].totalAmount += t.amount;
+                    
+                    // Track spending by wallet
+                    if (!stats[t.categoryId].walletBreakdown[t.walletId]) {
+                        stats[t.categoryId].walletBreakdown[t.walletId] = 0;
+                    }
+                    stats[t.categoryId].walletBreakdown[t.walletId] += t.amount;
+
                     totalMonthExpense += t.amount;
                 }
+            });
+
+            return Object.entries(stats).map(([categoryId, data]) => {
+                const category = categories.find(c => c.id === categoryId);
+                
+                // Format wallet breakdown for UI
+                const walletDetails = Object.entries(data.walletBreakdown).map(([walletId, amount]) => {
+                    const wallet = state.wallets.find(w => w.id === walletId);
+                    const walletName = wallet ? wallet.name : 'Ví đã xóa';
+                    return { walletName, amount };
+                }).sort((a, b) => b.amount - a.amount); // Sort wallets by amount spent
+
+                return {
+                    category,
+                    amount: data.totalAmount,
+                    percent: (data.totalAmount / totalMonthExpense) * 100 || 0,
+                    walletDetails: walletDetails
+                };
+            }).sort((a, b) => b.amount - a.amount);
+        }
             });
             return Object.entries(stats).map(([id, amount]) => ({
                 category: categories.find(c => c.id === id), amount, percent: (amount / totalMonthExpense) * 100 || 0
@@ -235,6 +268,9 @@
             const grouped = getGroupedTransactions();
             const overBudget = stats.totalExpense > stats.totalIncome * 0.7;
 
+            // Tính Tổng chi tiêu gộp lại (Chi tiêu tháng + Tiền đang nợ thẻ)
+            const combinedExpense = stats.totalExpense + stats.totalCredit;
+
             let html = `<div class="p-4 space-y-6 fade-in">
                 <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
                     <div class="absolute -right-6 -top-6 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl"></div>
@@ -262,7 +298,7 @@
                             </div>
                             <div class="text-right">
                                 <div class="flex items-center justify-end text-rose-400 text-[11px] font-semibold mb-1 uppercase tracking-wider"><i class="ph-bold ph-trend-down mr-1 text-sm"></i> Tổng Chi (Gộp Nợ)</div>
-                                <p class="font-semibold text-lg">${formatVND(stats.combinedExpense)}</p>
+                                <p class="font-semibold text-lg">${formatVND(combinedExpense)}</p>
                             </div>
                         </div>
                     </div>
@@ -280,13 +316,30 @@
 
             html += `<div>
                 <h3 class="font-bold text-slate-800 mb-3 flex items-center"><i class="ph-fill ph-chart-pie-slice mr-2 text-indigo-500 text-lg"></i> Cơ cấu chi tiêu</h3>
-                <div class="space-y-3 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">`;
+                <div class="space-y-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">`;
+            
             catStats.forEach(stat => {
-                html += `<div>
-                    <div class="flex justify-between text-sm mb-1"><span class="font-medium text-slate-700">${stat.category.name}</span><span class="text-slate-500">${formatVND(stat.amount)}</span></div>
-                    <div class="w-full bg-slate-100 rounded-full h-2"><div class="${stat.category.color} h-2 rounded-full" style="width: ${stat.percent}%"></div></div>
-                </div>`;
+                html += `<div class="border-b border-slate-100/50 last:border-0 pb-3 last:pb-0">
+                    <div class="flex justify-between items-end mb-1">
+                        <span class="font-bold text-slate-700 text-sm">${stat.category.name}</span>
+                        <span class="font-semibold text-slate-800 text-sm">${formatVND(stat.amount)}</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2 mb-2">
+                        <div class="${stat.category.color} h-2 rounded-full transition-all duration-500" style="width: ${stat.percent}%"></div>
+                    </div>
+                    <div class="space-y-1 mt-1.5 pl-2 border-l-2 border-slate-100">`;
+                
+                // Display breakdown by wallet
+                stat.walletDetails.forEach(detail => {
+                    html += `<div class="flex justify-between items-center">
+                        <span class="text-[10px] text-slate-500 font-medium">Từ: ${detail.walletName}</span>
+                        <span class="text-[10px] text-slate-600 font-semibold">${formatVND(detail.amount)}</span>
+                    </div>`;
+                });
+                
+                html += `</div></div>`;
             });
+            
             if(catStats.length === 0) html += `<p class="text-center text-sm text-slate-400 py-2">Chưa có dữ liệu chi tiêu tháng này.</p>`;
             
             html += `</div></div><div>
