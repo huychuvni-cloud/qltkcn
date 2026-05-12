@@ -730,45 +730,72 @@
 
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
-                        state.userId = user.uid;
-                        const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'finance_data');
-                        
-                        // Khởi tạo Dữ liệu mẫu nều tài khoản mới tinh
-                        const docSnap = await getDoc(docRef);
-                        if (!docSnap.exists()) {
-                            const initW = [ { id: 'w1', name: 'Tiền mặt', type: 'cash', balance: 0, status: 'active' } ];
-                            await setDoc(docRef, { wallets: initW, transactions: [] });
-                        }
-
-                        // Lắng nghe thay đổi Real-time
-                        onSnapshot(docRef, (docSnap) => {
-                            if (docSnap.exists()) {
-                                const data = docSnap.data();
-                                state.wallets = data.wallets || [];
-                                state.transactions = data.transactions || [];
-                                
-                                // Tắt loader, hiển thị UI
-                                state.isDataLoaded = true;
-                                document.getElementById('loader').classList.add('hidden-fade');
-                                setTimeout(() => document.getElementById('loader').style.display = 'none', 300);
-                                
-                                // Hiệu ứng nháy đèn Sync
-                                const syncStatus = document.getElementById('sync-status');
-                                if(syncStatus) {
-                                    syncStatus.classList.remove('bg-emerald-500'); syncStatus.classList.add('bg-indigo-500');
-                                    setTimeout(() => { syncStatus.classList.remove('bg-indigo-500'); syncStatus.classList.add('bg-emerald-500'); }, 500);
-                                }
-                                
-                                window.app.render();
+                        try {
+                            state.userId = user.uid;
+                            const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'finance_data');
+                            
+                            // Khởi tạo Dữ liệu mẫu nều tài khoản mới tinh
+                            const docSnap = await getDoc(docRef);
+                            if (!docSnap.exists()) {
+                                const initW = [ { id: 'w1', name: 'Tiền mặt', type: 'cash', balance: 0, status: 'active' } ];
+                                await setDoc(docRef, { wallets: initW, transactions: [] });
                             }
-                        }, (error) => {
-                            console.error("Lỗi đồng bộ Firebase:", error);
-                        });
+
+                            // Lắng nghe thay đổi Real-time
+                            onSnapshot(docRef, (docSnap) => {
+                                if (docSnap.exists()) {
+                                    const data = docSnap.data();
+                                    state.wallets = data.wallets || [];
+                                    state.transactions = data.transactions || [];
+                                    
+                                    // Tắt loader, hiển thị UI
+                                    state.isDataLoaded = true;
+                                    const loader = document.getElementById('loader');
+                                    if(loader) {
+                                        loader.classList.add('hidden-fade');
+                                        setTimeout(() => loader.style.display = 'none', 300);
+                                    }
+                                    
+                                    // Hiệu ứng nháy đèn Sync
+                                    const syncStatus = document.getElementById('sync-status');
+                                    if(syncStatus) {
+                                        syncStatus.classList.remove('bg-emerald-500'); syncStatus.classList.add('bg-indigo-500');
+                                        setTimeout(() => { syncStatus.classList.remove('bg-indigo-500'); syncStatus.classList.add('bg-emerald-500'); }, 500);
+                                    }
+                                    
+                                    window.app.render();
+                                }
+                            }, (error) => {
+                                console.error("Lỗi đồng bộ Firestore:", error);
+                                document.getElementById('loader').innerHTML = `
+                                    <div class="p-6 text-center">
+                                        <i class="ph ph-warning text-5xl text-rose-500 mb-4"></i>
+                                        <p class="text-rose-600 font-bold mb-2">Không có quyền truy cập Dữ liệu</p>
+                                        <p class="text-sm text-slate-500">Firebase báo lỗi: ${error.message}</p>
+                                        <p class="text-xs text-slate-400 mt-4">Hãy kiểm tra lại Firestore Database hoặc Authentication trong Console.</p>
+                                    </div>`;
+                            });
+                        } catch (err) {
+                            console.error("Lỗi truy xuất ban đầu:", err);
+                            document.getElementById('loader').innerHTML = `
+                                <div class="p-6 text-center">
+                                    <i class="ph ph-database text-5xl text-rose-500 mb-4"></i>
+                                    <p class="text-rose-600 font-bold mb-2">Chưa bật Firestore Database</p>
+                                    <p class="text-sm text-slate-500">Chi tiết lỗi: ${err.message}</p>
+                                    <p class="text-xs text-slate-400 mt-4">Vui lòng vào Firebase Console > Build > Firestore Database > Bấm Create (Start in Test mode).</p>
+                                </div>`;
+                        }
                     }
                 });
             } catch (error) {
                 console.error("Lỗi khởi tạo Auth:", error);
-                document.getElementById('loader').innerHTML = `<p class="text-rose-500 font-bold">Lỗi kết nối máy chủ. Vui lòng thử lại.</p>`;
+                document.getElementById('loader').innerHTML = `
+                    <div class="p-6 text-center">
+                        <i class="ph ph-user-circle-minus text-5xl text-rose-500 mb-4"></i>
+                        <p class="text-rose-600 font-bold mb-2">Chưa bật Đăng nhập (Authentication)</p>
+                        <p class="text-sm text-slate-500">Chi tiết lỗi: ${error.message}</p>
+                        <p class="text-xs text-slate-400 mt-4">Vui lòng vào Firebase Console > Build > Authentication > Sign-in method > Bật Anonymous.</p>
+                    </div>`;
             }
         }
 
