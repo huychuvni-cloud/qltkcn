@@ -619,7 +619,7 @@
 
                 // Lưu lên Firebase
                 try {
-                    const docRef = doc(db, 'artifacts', appId, 'users', state.userId, 'finance_data');
+                    const docRef = doc(db, 'users', state.userId);
                     await setDoc(docRef, { wallets: updatedWallets, transactions: updatedTransactions }, { merge: true });
                     this.setTab('home');
                 } catch(e) { console.error("Lỗi lưu DB", e); }
@@ -640,7 +640,7 @@
                 let updatedTransactions = state.transactions.filter(t => t.id !== state.txForm.id);
 
                 try {
-                    const docRef = doc(db, 'artifacts', appId, 'users', state.userId, 'finance_data');
+                    const docRef = doc(db, 'users', state.userId);
                     await setDoc(docRef, { wallets: updatedWallets, transactions: updatedTransactions }, { merge: true });
                     this.setTab('home');
                 } catch(e) { console.error("Lỗi xóa DB", e); }
@@ -672,7 +672,7 @@
                 const updatedWallets = [...state.wallets, newWallet];
 
                 try {
-                    const docRef = doc(db, 'artifacts', appId, 'users', state.userId, 'finance_data');
+                    const docRef = doc(db, 'users', state.userId);
                     await setDoc(docRef, { wallets: updatedWallets }, { merge: true });
                     state.walletForm = { name: '', type: 'cash', balance: '', limit: '' };
                     this.setTab('wallets');
@@ -685,7 +685,7 @@
                 if(w) {
                     w.status = w.status === 'locked' ? 'active' : 'locked';
                     try {
-                        const docRef = doc(db, 'artifacts', appId, 'users', state.userId, 'finance_data');
+                        const docRef = doc(db, 'users', state.userId);
                         await setDoc(docRef, { wallets: updatedWallets }, { merge: true });
                     } catch(e) { console.error(e); }
                 }
@@ -710,7 +710,7 @@
                     w.status = 'deleted';
                     state.confirmingDeleteWalletId = null;
                     try {
-                        const docRef = doc(db, 'artifacts', appId, 'users', state.userId, 'finance_data');
+                        const docRef = doc(db, 'users', state.userId);
                         await setDoc(docRef, { wallets: updatedWallets }, { merge: true });
                     } catch(e) { console.error(e); }
                 }
@@ -732,7 +732,7 @@
                     if (user) {
                         try {
                             state.userId = user.uid;
-                            const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'finance_data');
+                            const docRef = doc(db, 'users', user.uid);
                             
                             // Khởi tạo Dữ liệu mẫu nều tài khoản mới tinh
                             const docSnap = await getDoc(docRef);
