@@ -65,6 +65,7 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-auth.js";
         import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
 
+        // Cấu hình Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyACL12yLGdCMLe7GY2rlVbE56mh_HcQEbw",
             authDomain: "qltkcn.firebaseapp.com",
@@ -74,12 +75,12 @@
             appId: "1:271958756874:web:3e8d418df901a5684719f3",
             measurementId: "G-S72MTV26B8"
         };
-        const appId = 'ung-dung-ca-nhan'; // Tên thư mục gốc để bạn dễ quản lý
         
         const fbApp = initializeApp(firebaseConfig);
         const auth = getAuth(fbApp);
         const db = getFirestore(fbApp);
 
+        // Danh mục mặc định
         const categories = [
             { id: 'c1', name: 'Ăn uống', type: 'expense', color: 'bg-orange-500' },
             { id: 'c2', name: 'Di chuyển', type: 'expense', color: 'bg-blue-500' },
@@ -87,15 +88,16 @@
             { id: 'c4', name: 'Giải trí', type: 'expense', color: 'bg-purple-500' },
             { id: 'c5', name: 'Lương', type: 'income', color: 'bg-green-500' },
             { id: 'c6', name: 'Thưởng', type: 'income', color: 'bg-emerald-400' },
-            { id: 'c7', name: 'Thu khác', type: 'income', color: 'bg-teal-500' } // Thêm danh mục thu khác
+            { id: 'c7', name: 'Thu khác', type: 'income', color: 'bg-teal-500' }
         ];
 
+        // Trạng thái ứng dụng
         window.state = {
             activeTab: 'home',
             wallets: [],
             transactions: [],
             txForm: { id: null, amount: '', note: '', type: 'expense', categoryId: 'c1', walletId: '', date: '', time: '', hasImage: false },
-            walletForm: { id: null, name: '', type: 'cash', balance: '', limit: '' }, // Thêm id cho form sửa ví
+            walletForm: { id: null, name: '', type: 'cash', balance: '', limit: '' },
             reportPeriod: 'month',
             isConfirmingDelete: false,
             confirmingDeleteWalletId: null,
@@ -111,6 +113,7 @@
             return '<i class="ph ph-credit-card"></i>';
         };
 
+        // Hàm tiện ích
         function getStats() {
             let totalBalance = 0, totalExpense = 0, totalIncome = 0;
             let totalCash = 0, totalCredit = 0;
@@ -136,7 +139,6 @@
                 }
             });
             
-            // Tính tổng chi tiêu gộp (Chi tiêu tháng + Dư nợ tín dụng)
             const combinedExpense = totalExpense + totalCredit;
 
             return { totalBalance, totalExpense, totalIncome, totalCash, totalCredit, combinedExpense };
@@ -154,12 +156,11 @@
                     if (!stats[t.categoryId]) {
                         stats[t.categoryId] = {
                             totalAmount: 0,
-                            walletBreakdown: {} // Track spending by wallet within the category
+                            walletBreakdown: {}
                         };
                     }
                     stats[t.categoryId].totalAmount += t.amount;
                     
-                    // Track spending by wallet
                     if (!stats[t.categoryId].walletBreakdown[t.walletId]) {
                         stats[t.categoryId].walletBreakdown[t.walletId] = 0;
                     }
@@ -171,13 +172,11 @@
 
             return Object.entries(stats).map(([categoryId, data]) => {
                 const category = categories.find(c => c.id === categoryId);
-                
-                // Format wallet breakdown for UI
                 const walletDetails = Object.entries(data.walletBreakdown).map(([walletId, amount]) => {
                     const wallet = state.wallets.find(w => w.id === walletId);
                     const walletName = wallet ? wallet.name : 'Ví đã xóa';
                     return { walletName, amount };
-                }).sort((a, b) => b.amount - a.amount); // Sort wallets by amount spent
+                }).sort((a, b) => b.amount - a.amount);
 
                 return {
                     category,
@@ -186,11 +185,6 @@
                     walletDetails: walletDetails
                 };
             }).sort((a, b) => b.amount - a.amount);
-        }
-            });
-            return Object.entries(stats).map(([id, amount]) => ({
-                category: categories.find(c => c.id === id), amount, percent: (amount / totalMonthExpense) * 100 || 0
-            })).sort((a, b) => b.amount - a.amount);
         }
 
         function getGroupedTransactions() {
@@ -262,21 +256,16 @@
             return { currExpense, lastExpense, diff: currExpense - lastExpense, details, periodLabel };
         }
 
+        // Render Views
         function renderDashboard() {
             const stats = getStats();
             const catStats = getCategoryStats();
             const grouped = getGroupedTransactions();
             const overBudget = stats.totalExpense > stats.totalIncome * 0.7;
 
-            // Tính Tổng chi tiêu gộp lại (Chi tiêu tháng + Tiền đang nợ thẻ)
-            const combinedExpense = stats.totalExpense + stats.totalCredit;
-
             let html = `<div class="p-4 space-y-6 fade-in">
                 <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
-                    <div class="absolute -right-6 -top-6 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl"></div>
-                    <div class="absolute -left-6 -bottom-6 w-32 h-32 bg-emerald-500/20 rounded-full blur-2xl"></div>
-                    
-                    <div class="relative z-10">
+                    <div class="absolute z-10">
                         <p class="text-slate-400 text-sm font-medium">Tổng tài sản ròng</p>
                         <h1 class="text-3xl font-bold mt-1 tracking-tight">${formatVND(stats.totalBalance)}</h1>
                         
@@ -298,7 +287,7 @@
                             </div>
                             <div class="text-right">
                                 <div class="flex items-center justify-end text-rose-400 text-[11px] font-semibold mb-1 uppercase tracking-wider"><i class="ph-bold ph-trend-down mr-1 text-sm"></i> Tổng Chi (Gộp Nợ)</div>
-                                <p class="font-semibold text-lg">${formatVND(combinedExpense)}</p>
+                                <p class="font-semibold text-lg">${formatVND(stats.combinedExpense)}</p>
                             </div>
                         </div>
                     </div>
@@ -329,7 +318,6 @@
                     </div>
                     <div class="space-y-1 mt-1.5 pl-2 border-l-2 border-slate-100">`;
                 
-                // Display breakdown by wallet
                 stat.walletDetails.forEach(detail => {
                     html += `<div class="flex justify-between items-center">
                         <span class="text-[10px] text-slate-500 font-medium">Từ: ${detail.walletName}</span>
@@ -549,7 +537,6 @@
                             <input type="number" id="w-balance" value="${Math.abs(form.balance)}" oninput="app.updateWalletForm()" placeholder="0" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none text-lg font-bold text-slate-800" />
                             <span class="absolute right-4 top-3.5 text-slate-400 font-medium text-sm">VND</span>
                         </div>
-                        <p class="text-[10px] text-slate-400 mt-1 italic">${isEdit ? 'Lưu ý: Thay đổi số dư tại đây sẽ không làm ảnh hưởng đến các giao dịch cũ.' : 'Nhập số tiền hiện có.'}</p>
                     </div>
                     ${form.type === 'credit' ? `
                     <div class="fade-in">
@@ -628,6 +615,7 @@
             return html;
         }
 
+        // Object điều khiển ứng dụng
         window.app = {
             render() {
                 if(!state.isDataLoaded) return;
@@ -638,7 +626,6 @@
                 else if (state.activeTab === 'add-wallet') main.innerHTML = renderAddWallet();
                 else if (state.activeTab === 'reports') main.innerHTML = renderReports();
 
-                // Update Nav styles
                 ['home', 'wallets', 'reports'].forEach(tab => {
                     const el = document.getElementById(`nav-${tab}`);
                     if (!el) return;
@@ -659,7 +646,6 @@
                 state.confirmingDeleteWalletId = null;
                 this.render();
             },
-            
             openAddTx() {
                 const now = new Date();
                 const activeWallets = state.wallets.filter(w => w.status === 'active');
@@ -688,7 +674,6 @@
             },
             setTxCategory(id) { this.updateFormState(); state.txForm.categoryId = id; this.render(); },
             toggleTxImage() { this.updateFormState(); state.txForm.hasImage = !state.txForm.hasImage; this.render(); },
-            
             async saveTx() {
                 this.updateFormState();
                 if (!state.txForm.amount || !state.txForm.walletId || !state.userId) return;
@@ -713,7 +698,6 @@
                     this.setTab('home');
                 } catch(e) { console.error("Lỗi lưu DB", e); }
             },
-
             async deleteTx() {
                 if (!state.isConfirmingDelete) {
                     state.isConfirmingDelete = true;
@@ -734,7 +718,6 @@
                     this.setTab('home');
                 } catch(e) { console.error("Lỗi xóa DB", e); }
             },
-
             simulateAIScan() {
                 state.isScanning = true; this.render();
                 setTimeout(() => {
@@ -742,27 +725,23 @@
                     state.isScanning = false; this.render();
                 }, 1500);
             },
-
             openAddWallet() {
                 state.walletForm = { id: null, name: '', type: 'cash', balance: '', limit: '' };
                 this.setTab('add-wallet');
             },
-
             editWallet(id) {
                 const w = state.wallets.find(wallet => wallet.id === id);
                 if (w) {
-                    state.walletForm = { ...w, balance: Math.abs(w.balance).toString() }; // Chuyển số dư thành số dương để dễ edit
+                    state.walletForm = { ...w, balance: Math.abs(w.balance).toString() }; 
                     this.setTab('add-wallet');
                 }
             },
-
             updateWalletForm() {
                 state.walletForm.name = document.getElementById('w-name')?.value || '';
                 state.walletForm.balance = document.getElementById('w-balance')?.value || '';
                 state.walletForm.limit = document.getElementById('w-limit')?.value || '';
             },
             setWalletType(type) { this.updateWalletForm(); state.walletForm.type = type; this.render(); },
-            
             async saveWallet() {
                 this.updateWalletForm();
                 if(!state.walletForm.name || state.walletForm.balance === '' || !state.userId) return;
@@ -774,7 +753,6 @@
                 let updatedWallets = [...state.wallets];
 
                 if (state.walletForm.id) {
-                    // Update existing
                     const idx = updatedWallets.findIndex(w => w.id === state.walletForm.id);
                     if (idx > -1) {
                         updatedWallets[idx] = { 
@@ -786,7 +764,6 @@
                         };
                     }
                 } else {
-                    // Add new
                     const newWallet = { id: `w${Date.now()}`, name: state.walletForm.name, type: state.walletForm.type, balance: bal, limit: lim, status: 'active' };
                     updatedWallets.push(newWallet);
                 }
@@ -798,7 +775,6 @@
                     this.setTab('wallets');
                 } catch(e) { console.error("Lỗi lưu Ví", e); }
             },
-
             async toggleLockWallet(id) {
                 let updatedWallets = [...state.wallets];
                 const w = updatedWallets.find(w => w.id === id);
@@ -810,7 +786,6 @@
                     } catch(e) { console.error(e); }
                 }
             },
-
             async deleteWallet(id) {
                 if (state.confirmingDeleteWalletId !== id) {
                     state.confirmingDeleteWalletId = id;
@@ -835,27 +810,22 @@
                     } catch(e) { console.error(e); }
                 }
             },
-            
             setReportPeriod(period) { state.reportPeriod = period; this.render(); }
         };
 
+        // Khởi tạo Firebase
         async function initFirebase() {
             try {
-                if (window.__initial_auth_token) {
-                    await signInWithCustomToken(auth, window.__initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                await signInAnonymously(auth);
 
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         try {
-                            // Cố định ID để đồng bộ mọi thiết bị
                             state.userId = "huychu_master_database"; 
                             
                             const docRef = doc(db, 'users', state.userId);
                             
-                            // 1. Lấy dữ liệu lần đầu (Không dùng onSnapshot ngay để bắt lỗi)
+                            // Lấy dữ liệu lần đầu
                             const docSnap = await getDoc(docRef);
                             
                             if (docSnap.exists()) {
@@ -863,7 +833,7 @@
                                 state.wallets = data.wallets || [];
                                 state.transactions = data.transactions || [];
                             } else {
-                                // 2. Nếu chưa có (người dùng mới), tạo file trắng
+                                // Tạo mới nếu chưa có
                                 const initW = [ { id: 'w1', name: 'Tiền mặt', type: 'cash', balance: 0, status: 'active' } ];
                                 await setDoc(docRef, { wallets: initW, transactions: [] });
                                 state.wallets = initW;
@@ -872,7 +842,7 @@
 
                             state.isDataLoaded = true;
                             
-                            // Tắt màn hình loading
+                            // Tắt loading
                             const loader = document.getElementById('loader');
                             if(loader) {
                                 loader.classList.add('hidden-fade');
@@ -881,14 +851,13 @@
 
                             window.app.render();
 
-                            // 3. Bắt đầu lắng nghe sự thay đổi (Real-time Sync) SAU KHI đã tải thành công lần đầu
+                            // Bật realtime sync
                             onSnapshot(docRef, (snap) => {
-                                if (snap.exists() && state.isDataLoaded) { // Chỉ update nếu đã load lần đầu
+                                if (snap.exists() && state.isDataLoaded) {
                                     const data = snap.data();
                                     state.wallets = data.wallets || [];
                                     state.transactions = data.transactions || [];
                                     
-                                    // Chớp đèn báo đồng bộ
                                     const syncStatus = document.getElementById('sync-status');
                                     if(syncStatus) {
                                         syncStatus.classList.remove('bg-emerald-500'); syncStatus.classList.add('bg-indigo-500');
@@ -897,12 +866,10 @@
                                     
                                     window.app.render();
                                 }
-                            }, (error) => {
-                                console.error("Lỗi đồng bộ ngầm Firestore:", error);
                             });
 
                         } catch (err) {
-                            console.error("Lỗi lấy dữ liệu:", err);
+                            console.error("Lỗi Firebase:", err);
                             document.getElementById('loader').innerHTML = `
                                 <div class="p-6 text-center">
                                     <i class="ph ph-x-circle text-5xl text-rose-500 mb-4"></i>
@@ -917,7 +884,7 @@
                 document.getElementById('loader').innerHTML = `
                     <div class="p-6 text-center">
                         <i class="ph ph-x-circle text-5xl text-rose-500 mb-4"></i>
-                        <p class="text-rose-600 font-bold mb-2">Lỗi Xác Thực Đăng Nhập</p>
+                        <p class="text-rose-600 font-bold mb-2">Lỗi Đăng Nhập Firebase</p>
                         <p class="text-sm text-slate-500 break-words">${error.message}</p>
                     </div>`;
             }
