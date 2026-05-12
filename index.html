@@ -850,8 +850,11 @@
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         try {
-                            state.userId = user.uid;
-                            const docRef = doc(db, 'users', user.uid);
+                            // SỬA Ở ĐÂY: Thay vì dùng user.uid ngẫu nhiên của từng máy, 
+                            // ta cố định luôn 1 ID duy nhất cho bạn.
+                            state.userId = "huychu_master_database"; 
+                            
+                            const docRef = doc(db, 'users', state.userId);
                             
                             const docSnap = await getDoc(docRef);
                             if (!docSnap.exists()) {
