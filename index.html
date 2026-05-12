@@ -12,20 +12,25 @@
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        .slide-in-right { animation: slideInRight 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        /* Hiệu ứng loading full màn hình */
+        @keyframes slideInRight { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
         #loader { transition: opacity 0.3s; }
         .hidden-fade { opacity: 0; pointer-events: none; }
+        
+        /* Bổ sung để fix padding dưới cho main khi menu fixed */
+        body { overscroll-behavior-y: none; }
+        #app-container { height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+        #main-content { flex: 1; overflow-y: auto; padding-bottom: 90px; }
     </style>
 </head>
 <body class="bg-slate-200 text-slate-800">
 
-    <div id="app" class="max-w-md mx-auto min-h-screen bg-slate-50 relative shadow-2xl overflow-hidden sm:border-x sm:border-slate-200 flex flex-col">
+    <div id="app-container" class="max-w-md mx-auto bg-slate-50 relative shadow-2xl overflow-hidden sm:border-x sm:border-slate-200">
         
-        <!-- Màn hình chờ (Loader) -->
         <div id="loader" class="absolute inset-0 bg-slate-50 z-50 flex flex-col items-center justify-center">
             <i class="ph ph-spinner animate-spin text-5xl text-indigo-600 mb-4"></i>
-            <p class="text-slate-500 font-medium">Đang đồng bộ dữ liệu đám mây...</p>
+            <p class="text-slate-500 font-medium" id="loader-text">Đang đồng bộ dữ liệu đám mây...</p>
         </div>
 
         <header class="pt-8 pb-4 px-5 bg-white sticky top-0 z-30 shadow-sm border-b border-slate-100 flex items-center justify-between">
@@ -33,7 +38,7 @@
                 <p class="text-sm text-slate-500">Xin chào,</p>
                 <div class="flex items-center gap-2">
                     <p class="font-bold text-slate-800">Huy Chu 👋</p>
-                    <div id="sync-status" class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" title="Đã kết nối Cloud"></div>
+                    <div id="sync-status" class="w-2 h-2 rounded-full bg-slate-300 transition-colors" title="Trạng thái kết nối"></div>
                 </div>
             </div>
             <button onclick="app.openAddTx()" class="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-full shadow-md shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all">
@@ -42,9 +47,10 @@
             </button>
         </header>
 
-        <main id="main-content" class="flex-1 overflow-y-auto scrollbar-hide pb-24 relative"></main>
+        <main id="main-content" class="scrollbar-hide relative"></main>
 
-        <nav class="absolute bottom-0 w-full bg-white border-t border-slate-100 px-6 py-4 flex justify-between items-center rounded-t-3xl shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] z-20">
+        <!-- Menu cố định ở dưới cùng màn hình (fixed bottom-0) -->
+        <nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto w-full bg-white/95 backdrop-blur-sm border-t border-slate-100 px-6 py-4 flex justify-between items-center rounded-t-3xl shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] z-40 pb-safe">
             <button onclick="app.setTab('home')" id="nav-home" class="flex flex-col items-center gap-1 w-16 transition-colors text-indigo-600">
                 <i class="ph-fill ph-house text-2xl"></i>
                 <span class="text-[10px] font-semibold">Tổng quan</span>
@@ -62,8 +68,8 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
 
         // Cấu hình Firebase
         const firebaseConfig = {
@@ -80,7 +86,7 @@
         const auth = getAuth(fbApp);
         const db = getFirestore(fbApp);
 
-        // Danh mục mặc định
+        // Danh mục
         const categories = [
             { id: 'c1', name: 'Ăn uống', type: 'expense', color: 'bg-orange-500' },
             { id: 'c2', name: 'Di chuyển', type: 'expense', color: 'bg-blue-500' },
@@ -91,7 +97,7 @@
             { id: 'c7', name: 'Thu khác', type: 'income', color: 'bg-teal-500' }
         ];
 
-        // Trạng thái ứng dụng
+        // Global State
         window.state = {
             activeTab: 'home',
             wallets: [],
@@ -99,10 +105,12 @@
             txForm: { id: null, amount: '', note: '', type: 'expense', categoryId: 'c1', walletId: '', date: '', time: '', hasImage: false },
             walletForm: { id: null, name: '', type: 'cash', balance: '', limit: '' },
             reportPeriod: 'month',
+            walletFilterPeriod: 'all', // Lọc trong chi tiết ví
+            selectedWalletId: null, // Ví đang được xem chi tiết
             isConfirmingDelete: false,
             confirmingDeleteWalletId: null,
             isScanning: false,
-            userId: null,
+            userId: "huychu_master_database", // ID cố định
             isDataLoaded: false
         };
 
@@ -113,19 +121,18 @@
             return '<i class="ph ph-credit-card"></i>';
         };
 
-        // Hàm tiện ích
         function getStats() {
             let totalBalance = 0, totalExpense = 0, totalIncome = 0;
             let totalCash = 0, totalCredit = 0;
 
             state.wallets.filter(w => w.status !== 'deleted').forEach(w => {
-                totalBalance += w.balance;
                 if (w.type === 'credit') {
                     totalCredit += Math.abs(w.balance); 
                 } else {
                     totalCash += w.balance; 
                 }
             });
+            totalBalance = totalCash - totalCredit;
             
             const now = new Date();
             const currMonth = now.getMonth();
@@ -139,9 +146,7 @@
                 }
             });
             
-            const combinedExpense = totalExpense + totalCredit;
-
-            return { totalBalance, totalExpense, totalIncome, totalCash, totalCredit, combinedExpense };
+            return { totalBalance, totalExpense, totalIncome, totalCash, totalCredit };
         }
 
         function getCategoryStats() {
@@ -154,10 +159,7 @@
                 const d = new Date(t.date);
                 if(d.getMonth() === currMonth && d.getFullYear() === currYear) {
                     if (!stats[t.categoryId]) {
-                        stats[t.categoryId] = {
-                            totalAmount: 0,
-                            walletBreakdown: {}
-                        };
+                        stats[t.categoryId] = { totalAmount: 0, walletBreakdown: {} };
                     }
                     stats[t.categoryId].totalAmount += t.amount;
                     
@@ -187,9 +189,10 @@
             }).sort((a, b) => b.amount - a.amount);
         }
 
-        function getGroupedTransactions() {
+        // Tạo mảng giao dịch nhóm theo ngày dựa trên mảng đầu vào
+        function getGroupedTransactions(txArray) {
             const groups = {};
-            state.transactions.forEach(t => {
+            txArray.forEach(t => {
                 if (!groups[t.date]) groups[t.date] = [];
                 groups[t.date].push(t);
             });
@@ -198,74 +201,15 @@
             }));
         }
 
-        function getReportStats() {
-            const now = new Date();
-            let currStart, currEnd, lastStart, lastEnd, periodLabel = '';
-            const currYear = now.getFullYear();
-            const currMonth = now.getMonth();
-            const currDate = now.getDate();
-
-            if (state.reportPeriod === 'day') {
-                currStart = new Date(currYear, currMonth, currDate, 0, 0, 0); 
-                currEnd = new Date(currYear, currMonth, currDate, 23, 59, 59);
-                lastStart = new Date(currYear, currMonth, currDate - 1, 0, 0, 0); 
-                lastEnd = new Date(currYear, currMonth, currDate - 1, 23, 59, 59);
-                periodLabel = 'Hôm nay vs Hôm qua';
-            } else if (state.reportPeriod === 'week') {
-                const dayOfWeek = now.getDay() === 0 ? 7 : now.getDay();
-                currStart = new Date(currYear, currMonth, currDate - dayOfWeek + 1, 0, 0, 0);
-                currEnd = new Date(currYear, currMonth, currDate + (7 - dayOfWeek), 23, 59, 59);
-                lastStart = new Date(currStart.getTime() - 7 * 24 * 60 * 60 * 1000);
-                lastEnd = new Date(currEnd.getTime() - 7 * 24 * 60 * 60 * 1000);
-                periodLabel = 'Tuần này vs Tuần trước';
-            } else if (state.reportPeriod === 'month') {
-                currStart = new Date(currYear, currMonth, 1, 0, 0, 0); 
-                currEnd = new Date(currYear, currMonth + 1, 0, 23, 59, 59);
-                lastStart = new Date(currYear, currMonth - 1, 1, 0, 0, 0); 
-                lastEnd = new Date(currYear, currMonth, 0, 23, 59, 59);
-                periodLabel = `Tháng ${currMonth + 1} vs Tháng ${currMonth === 0 ? 12 : currMonth}`;
-            } else if (state.reportPeriod === 'year') {
-                currStart = new Date(currYear, 0, 1, 0, 0, 0); 
-                currEnd = new Date(currYear, 11, 31, 23, 59, 59);
-                lastStart = new Date(currYear - 1, 0, 1, 0, 0, 0); 
-                lastEnd = new Date(currYear - 1, 11, 31, 23, 59, 59);
-                periodLabel = `Năm ${currYear} vs Năm ${currYear - 1}`;
-            }
-
-            let currExpense = 0, lastExpense = 0;
-            const categoryDiff = {};
-
-            state.transactions.filter(t => t.type === 'expense').forEach(t => {
-                const txDate = new Date(`${t.date}T${t.time || '12:00'}:00`);
-                const isCurr = txDate >= currStart && txDate <= currEnd;
-                const isLast = txDate >= lastStart && txDate <= lastEnd;
-
-                if (isCurr || isLast) {
-                    if (!categoryDiff[t.categoryId]) categoryDiff[t.categoryId] = { curr: 0, last: 0 };
-                    if (isCurr) { currExpense += t.amount; categoryDiff[t.categoryId].curr += t.amount; }
-                    else { lastExpense += t.amount; categoryDiff[t.categoryId].last += t.amount; }
-                }
-            });
-
-            const details = Object.keys(categoryDiff).map(id => ({
-                category: categories.find(c => c.id === id),
-                curr: categoryDiff[id].curr, last: categoryDiff[id].last,
-                diff: categoryDiff[id].curr - categoryDiff[id].last
-            })).filter(d => d.curr > 0 || d.last > 0).sort((a,b) => b.diff - a.diff);
-
-            return { currExpense, lastExpense, diff: currExpense - lastExpense, details, periodLabel };
-        }
-
-        // Render Views
         function renderDashboard() {
             const stats = getStats();
             const catStats = getCategoryStats();
-            const grouped = getGroupedTransactions();
+            const grouped = getGroupedTransactions(state.transactions);
             const overBudget = stats.totalExpense > stats.totalIncome * 0.7;
 
             let html = `<div class="p-4 space-y-6 fade-in">
                 <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
-                    <div class="absolute z-10">
+                    <div class="absolute z-10 w-full pr-12">
                         <p class="text-slate-400 text-sm font-medium">Tổng tài sản ròng</p>
                         <h1 class="text-3xl font-bold mt-1 tracking-tight">${formatVND(stats.totalBalance)}</h1>
                         
@@ -280,14 +224,14 @@
                             </div>
                         </div>
 
-                        <div class="flex justify-between mt-5 pt-4 border-t border-slate-700/50">
+                        <div class="flex justify-between mt-5 pt-4 border-t border-slate-700/50 w-full">
                             <div>
                                 <div class="flex items-center text-emerald-400 text-[11px] font-semibold mb-1 uppercase tracking-wider"><i class="ph-bold ph-trend-up mr-1 text-sm"></i> Tổng thu (Tháng)</div>
                                 <p class="font-semibold text-lg">${formatVND(stats.totalIncome)}</p>
                             </div>
                             <div class="text-right">
-                                <div class="flex items-center justify-end text-rose-400 text-[11px] font-semibold mb-1 uppercase tracking-wider"><i class="ph-bold ph-trend-down mr-1 text-sm"></i> Tổng Chi (Gộp Nợ)</div>
-                                <p class="font-semibold text-lg">${formatVND(stats.combinedExpense)}</p>
+                                <div class="flex items-center justify-end text-rose-400 text-[11px] font-semibold mb-1 uppercase tracking-wider"><i class="ph-bold ph-trend-down mr-1 text-sm"></i> Tổng Chi (Gộp nợ)</div>
+                                <p class="font-semibold text-lg">${formatVND(stats.totalExpense + stats.totalCredit)}</p>
                             </div>
                         </div>
                     </div>
@@ -313,7 +257,7 @@
                         <span class="font-bold text-slate-700 text-sm">${stat.category.name}</span>
                         <span class="font-semibold text-slate-800 text-sm">${formatVND(stat.amount)}</span>
                     </div>
-                    <div class="w-full bg-slate-100 rounded-full h-2 mb-2">
+                    <div class="w-full bg-slate-100 rounded-full h-2 mb-2 overflow-hidden">
                         <div class="${stat.category.color} h-2 rounded-full transition-all duration-500" style="width: ${stat.percent}%"></div>
                     </div>
                     <div class="space-y-1 mt-1.5 pl-2 border-l-2 border-slate-100">`;
@@ -368,12 +312,168 @@
             return html + `</div></div></div>`;
         }
 
+        function renderWallets() {
+            let html = `<div class="p-4 space-y-4 fade-in">
+                <h2 class="text-2xl font-bold text-slate-800 mb-6">Tài khoản & Thẻ</h2>`;
+            
+            state.wallets.filter(w => w.status !== 'deleted').forEach(w => {
+                const isLocked = w.status === 'locked';
+                const isConfirmingDelete = state.confirmingDeleteWalletId === w.id;
+
+                html += `<div class="bg-white p-5 rounded-2xl shadow-sm border ${isLocked ? 'border-slate-200 opacity-60 bg-slate-50' : 'border-slate-100 hover:border-indigo-300 cursor-pointer hover:shadow-md'} transition-all relative overflow-hidden group">
+                    ${isLocked ? `<div class="absolute top-3 right-4 text-xs font-bold text-slate-400 bg-slate-200 px-2 py-0.5 rounded-full z-10"><i class="ph ph-lock-key"></i> Đã Khóa</div>` : ''}
+                    
+                    <!-- Vùng trắng bọc xung quanh để click xem chi tiết -->
+                    <div class="absolute inset-0 z-0" onclick="app.viewWalletDetails('${w.id}')"></div>
+
+                    <div class="flex justify-between items-start mb-4 relative z-10 pointer-events-none">
+                        <div class="flex items-center gap-3">
+                            <div class="p-3 bg-slate-100 rounded-xl text-slate-600 text-xl">${getWalletIcon(w.type)}</div>
+                            <div>
+                                <h3 class="font-bold ${isLocked ? 'text-slate-500 line-through' : 'text-slate-800'} uppercase">${w.name}</h3>
+                                <p class="text-xs text-slate-500 uppercase">${w.type === 'credit' ? 'Thẻ tín dụng' : (w.type === 'cash' ? 'Tiền mặt' : 'Tài khoản thường')}</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Nút Edit đè lên (để click được) -->
+                        <div class="pointer-events-auto">
+                            <button onclick="app.editWallet('${w.id}')" class="text-slate-400 hover:text-indigo-600 p-2 rounded-lg bg-slate-50 hover:bg-indigo-50 transition-colors">
+                                <i class="ph-bold ph-pencil-simple text-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-50 p-3 rounded-xl mb-3 border border-slate-100 relative z-10 pointer-events-none">
+                        <p class="text-sm text-slate-500 mb-1">${w.type === 'credit' ? 'Dư nợ hiện tại' : 'Số dư'}</p>
+                        <p class="text-xl font-bold ${w.type === 'credit' && w.balance < 0 ? 'text-rose-500' : 'text-slate-800'}">${formatVND(w.balance)}</p>
+                        ${w.type === 'credit' ? `<div class="mt-2 text-xs text-slate-500 flex justify-between"><span>Hạn mức: ${formatVND(w.limit)}</span><span>Khả dụng: ${formatVND(w.limit + w.balance)}</span></div>` : ''}
+                    </div>
+                    
+                    <div class="flex gap-2 relative z-10">
+                        <button onclick="app.toggleLockWallet('${w.id}')" class="flex-1 py-2 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
+                            ${isLocked ? '<i class="ph-bold ph-lock-key-open"></i> Mở khóa' : '<i class="ph-bold ph-lock-key"></i> Khóa thẻ'}
+                        </button>
+                        <button onclick="app.deleteWallet('${w.id}')" class="flex-1 py-2 rounded-lg text-xs font-semibold transition-colors ${isConfirmingDelete ? 'bg-red-500 text-white shadow-md' : 'bg-rose-50 text-rose-500 hover:bg-rose-100'}">
+                            ${isConfirmingDelete ? 'Chắc chắn xóa?' : '<i class="ph-bold ph-trash"></i> Xóa ví'}
+                        </button>
+                    </div>
+                </div>`;
+            });
+
+            html += `<button onclick="app.openAddWallet()" class="w-full py-4 border-2 border-dashed border-slate-300 text-slate-500 font-semibold rounded-2xl hover:bg-slate-50 transition-colors flex items-center justify-center gap-2">
+                <i class="ph-bold ph-plus-circle text-xl"></i> Thêm tài khoản mới
+            </button></div>`;
+            return html;
+        }
+
+        function renderWalletDetails() {
+            const w = state.wallets.find(w => w.id === state.selectedWalletId);
+            if(!w) return `<p>Lỗi: Không tìm thấy nguồn tiền</p>`;
+
+            // Lọc Giao dịch
+            let filteredTxs = state.transactions.filter(t => t.walletId === w.id);
+            const now = new Date();
+            const cMonth = now.getMonth(), cYear = now.getFullYear();
+
+            if (state.walletFilterPeriod === 'month') {
+                filteredTxs = filteredTxs.filter(t => { const d = new Date(t.date); return d.getMonth() === cMonth && d.getFullYear() === cYear; });
+            } else if (state.walletFilterPeriod === 'lastMonth') {
+                const lMonth = cMonth === 0 ? 11 : cMonth - 1;
+                const lYear = cMonth === 0 ? cYear - 1 : cYear;
+                filteredTxs = filteredTxs.filter(t => { const d = new Date(t.date); return d.getMonth() === lMonth && d.getFullYear() === lYear; });
+            } else if (state.walletFilterPeriod === 'year') {
+                filteredTxs = filteredTxs.filter(t => { const d = new Date(t.date); return d.getFullYear() === cYear; });
+            }
+
+            const grouped = getGroupedTransactions(filteredTxs);
+            let totalIn = 0, totalOut = 0;
+            filteredTxs.forEach(t => { if(t.type==='income') totalIn+=t.amount; else totalOut+=t.amount; });
+
+            let html = `<div class="p-4 bg-slate-50 fade-in slide-in-right">
+                <!-- Header -->
+                <div class="flex items-center gap-3 mb-6">
+                    <button onclick="app.setTab('wallets')" class="p-2 bg-white rounded-full shadow-sm text-slate-600 hover:bg-slate-100"><i class="ph-bold ph-arrow-left text-xl"></i></button>
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800 uppercase">${w.name}</h2>
+                        <p class="text-xs text-slate-500 font-medium">Chi tiết dòng tiền</p>
+                    </div>
+                </div>
+
+                <!-- Thẻ tóm tắt -->
+                <div class="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-3xl p-5 text-white shadow-xl mb-6 relative overflow-hidden">
+                    <i class="ph-fill ph-wallet text-6xl absolute -right-4 -bottom-4 opacity-10"></i>
+                    <p class="text-indigo-200 text-sm font-medium">${w.type === 'credit' ? 'Dư nợ đang ghi nhận' : 'Số dư thực tế'}</p>
+                    <h1 class="text-3xl font-bold mt-1 tracking-tight">${formatVND(w.balance)}</h1>
+                    
+                    <div class="flex justify-between mt-5 pt-4 border-t border-indigo-500/50">
+                        <div>
+                            <p class="text-emerald-300 text-[10px] font-semibold uppercase mb-0.5"><i class="ph-bold ph-arrow-down-left"></i> Tổng nạp vào</p>
+                            <p class="font-bold text-sm">${formatVND(totalIn)}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-rose-300 text-[10px] font-semibold uppercase mb-0.5"><i class="ph-bold ph-arrow-up-right"></i> Tổng chi ra</p>
+                            <p class="font-bold text-sm">${formatVND(totalOut)}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bộ lọc -->
+                <div class="flex overflow-x-auto scrollbar-hide gap-2 mb-4">
+                    <button onclick="app.setWalletFilter('all')" class="px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${state.walletFilterPeriod==='all'?'bg-slate-800 text-white shadow':'bg-white text-slate-500 border border-slate-200'}">Tất cả lịch sử</button>
+                    <button onclick="app.setWalletFilter('month')" class="px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${state.walletFilterPeriod==='month'?'bg-slate-800 text-white shadow':'bg-white text-slate-500 border border-slate-200'}">Tháng này</button>
+                    <button onclick="app.setWalletFilter('lastMonth')" class="px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${state.walletFilterPeriod==='lastMonth'?'bg-slate-800 text-white shadow':'bg-white text-slate-500 border border-slate-200'}">Tháng trước</button>
+                    <button onclick="app.setWalletFilter('year')" class="px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${state.walletFilterPeriod==='year'?'bg-slate-800 text-white shadow':'bg-white text-slate-500 border border-slate-200'}">Năm nay</button>
+                </div>
+
+                <!-- Danh sách giao dịch -->
+                <div class="space-y-4">`;
+
+            if(grouped.length === 0) {
+                html += `<div class="text-center py-10 bg-white rounded-2xl border border-dashed border-slate-300">
+                    <i class="ph ph-receipt text-4xl text-slate-300 mb-2"></i>
+                    <p class="text-slate-500 font-medium text-sm">Chưa có giao dịch nào trong khoảng thời gian này.</p>
+                </div>`;
+            }
+
+            grouped.forEach(group => {
+                const [year, month, day] = group.date.split('-');
+                const dailyTotal = group.items.reduce((sum, t) => sum + (t.type === 'expense' ? -t.amount : t.amount), 0);
+                html += `<div class="bg-white p-1 rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="flex justify-between items-center bg-slate-50 px-4 py-2 border-b border-slate-100">
+                        <span class="font-semibold text-slate-700 text-sm">${day}/${month}/${year}</span>
+                        <span class="text-sm font-bold ${dailyTotal >= 0 ? 'text-emerald-500' : 'text-slate-800'}">${dailyTotal >= 0 ? '+' : ''}${formatVND(dailyTotal)}</span>
+                    </div>
+                    <div class="p-2 space-y-1">`;
+                group.items.forEach(t => {
+                    const cat = categories.find(c => c.id === t.categoryId);
+                    const isExp = t.type === 'expense';
+
+                    html += `<div onclick="app.editTx('${t.id}')" class="flex items-center justify-between p-2 rounded-xl hover:bg-slate-100 cursor-pointer transition-colors">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center text-white ${cat.color} text-lg shrink-0">
+                                <i class="ph-bold ${isExp ? 'ph-trend-down' : 'ph-trend-up'}"></i>
+                            </div>
+                            <div class="overflow-hidden">
+                                <p class="font-semibold text-slate-800 text-sm truncate">${t.note || cat.name}</p>
+                                <p class="text-[10px] text-slate-400 font-medium uppercase tracking-wider truncate">${t.time} • ${cat.name}</p>
+                            </div>
+                        </div>
+                        <p class="font-bold text-sm ${isExp ? 'text-slate-800' : 'text-emerald-500'} shrink-0">${isExp ? '-' : '+'}${formatVND(t.amount)}</p>
+                    </div>`;
+                });
+                html += `</div></div>`;
+            });
+
+            html += `</div></div>`;
+            return html;
+        }
+
         function renderAddTransaction() {
             const form = state.txForm;
             const isEdit = !!form.id;
             const availableWallets = state.wallets.filter(w => w.status === 'active' || (isEdit && w.id === form.walletId));
             
-            let html = `<div class="p-4 bg-slate-50 pb-24 fade-in">
+            let html = `<div class="p-4 bg-slate-50 fade-in pb-10">
                 <div class="flex items-center justify-between mb-6">
                     <h2 class="text-2xl font-bold text-slate-800">${isEdit ? 'Sửa giao dịch' : 'Thêm giao dịch'}</h2>
                     ${isEdit ? `<button onclick="app.setTab('home')" class="text-slate-500 text-sm font-semibold p-2 bg-slate-200 rounded-lg hover:bg-slate-300">Hủy bỏ</button>` : ''}
@@ -459,61 +559,11 @@
             return html;
         }
 
-        function renderWallets() {
-            let html = `<div class="p-4 space-y-4 pb-24 fade-in">
-                <h2 class="text-2xl font-bold text-slate-800 mb-6">Tài khoản & Thẻ</h2>`;
-            
-            state.wallets.filter(w => w.status !== 'deleted').forEach(w => {
-                const isLocked = w.status === 'locked';
-                const isConfirmingDelete = state.confirmingDeleteWalletId === w.id;
-
-                html += `<div class="bg-white p-5 rounded-2xl shadow-sm border ${isLocked ? 'border-slate-200 opacity-60 bg-slate-50' : 'border-slate-100'} transition-all relative overflow-hidden group">
-                    ${isLocked ? `<div class="absolute top-3 right-4 text-xs font-bold text-slate-400 bg-slate-200 px-2 py-0.5 rounded-full"><i class="ph ph-lock-key"></i> Đã Khóa</div>` : ''}
-                    
-                    <div class="flex justify-between items-start mb-4">
-                        <div class="flex items-center gap-3">
-                            <div class="p-3 bg-slate-100 rounded-xl text-slate-600 text-xl">${getWalletIcon(w.type)}</div>
-                            <div>
-                                <h3 class="font-bold ${isLocked ? 'text-slate-500 line-through' : 'text-slate-800'}">${w.name}</h3>
-                                <p class="text-xs text-slate-500 uppercase">${w.type === 'credit' ? 'Thẻ tín dụng' : 'Tài khoản thường'}</p>
-                            </div>
-                        </div>
-                        <button onclick="app.editWallet('${w.id}')" class="text-slate-400 hover:text-indigo-600 p-2 rounded-lg bg-slate-50 hover:bg-indigo-50 transition-colors">
-                            <i class="ph-bold ph-pencil-simple text-lg"></i>
-                        </button>
-                    </div>
-                    <div class="bg-slate-50 p-3 rounded-xl mb-3 border border-slate-100">
-                        <p class="text-sm text-slate-500 mb-1">${w.type === 'credit' ? 'Dư nợ hiện tại' : 'Số dư'}</p>
-                        <p class="text-xl font-bold ${w.type === 'credit' && w.balance < 0 ? 'text-rose-500' : 'text-slate-800'}">${formatVND(w.balance)}</p>
-                        ${w.type === 'credit' ? `<div class="mt-2 text-xs text-slate-500 flex justify-between"><span>Hạn mức: ${formatVND(w.limit)}</span><span>Khả dụng: ${formatVND(w.limit + w.balance)}</span></div>` : ''}
-                    </div>
-                    
-                    <div class="flex gap-2">
-                        <button onclick="app.toggleLockWallet('${w.id}')" class="flex-1 py-2 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
-                            ${isLocked ? '<i class="ph-bold ph-lock-key-open"></i> Mở khóa' : '<i class="ph-bold ph-lock-key"></i> Khóa thẻ'}
-                        </button>
-                        <button onclick="app.deleteWallet('${w.id}')" class="flex-1 py-2 rounded-lg text-xs font-semibold transition-colors ${isConfirmingDelete ? 'bg-red-500 text-white shadow-md' : 'bg-rose-50 text-rose-500 hover:bg-rose-100'}">
-                            ${isConfirmingDelete ? 'Chắc chắn xóa?' : '<i class="ph-bold ph-trash"></i> Xóa ví'}
-                        </button>
-                    </div>
-                </div>`;
-            });
-
-            if(state.wallets.filter(w => w.status !== 'deleted').length === 0) {
-                 html += `<p class="text-center text-sm text-slate-400 py-4">Chưa có nguồn tiền nào.</p>`;
-            }
-
-            html += `<button onclick="app.openAddWallet()" class="w-full py-4 border-2 border-dashed border-slate-300 text-slate-500 font-semibold rounded-2xl hover:bg-slate-50 transition-colors flex items-center justify-center gap-2">
-                <i class="ph-bold ph-plus-circle text-xl"></i> Thêm tài khoản mới
-            </button></div>`;
-            return html;
-        }
-
         function renderAddWallet() {
             const form = state.walletForm;
             const isEdit = !!form.id;
 
-            let html = `<div class="p-4 bg-slate-50 pb-24 fade-in">
+            let html = `<div class="p-4 bg-slate-50 pb-10 fade-in">
                 <div class="flex items-center justify-between mb-6">
                     <h2 class="text-2xl font-bold text-slate-800">${isEdit ? 'Sửa nguồn tiền' : 'Thêm nguồn tiền'}</h2>
                     <button onclick="app.setTab('wallets')" class="text-slate-500 text-sm font-semibold p-2 bg-slate-200 rounded-lg hover:bg-slate-300">Hủy bỏ</button>
@@ -532,8 +582,9 @@
                         <input type="text" id="w-name" value="${form.name}" oninput="app.updateWalletForm()" placeholder="Vd: Ví MOMO, Thẻ đen..." class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none font-medium" />
                     </div>
                     <div>
-                        <label class="text-xs font-semibold text-slate-500 uppercase block mb-2">${form.type === 'credit' ? 'Dư nợ hiện tại' : 'Số dư ban đầu'}</label>
+                        <label class="text-xs font-semibold text-slate-500 uppercase block mb-2">${form.type === 'credit' ? 'Dư nợ hiện tại (Số thực tế)' : 'Số dư hiện tại'}</label>
                         <div class="relative">
+                            <!-- Hiển thị giá trị tuyệt đối để dễ nhập -->
                             <input type="number" id="w-balance" value="${Math.abs(form.balance)}" oninput="app.updateWalletForm()" placeholder="0" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none text-lg font-bold text-slate-800" />
                             <span class="absolute right-4 top-3.5 text-slate-400 font-medium text-sm">VND</span>
                         </div>
@@ -546,15 +597,71 @@
                             <span class="absolute right-4 top-3.5 text-slate-400 font-medium text-sm">VND</span>
                         </div>
                     </div>` : ''}
-                    <button onclick="app.saveWallet()" class="w-full mt-4 bg-slate-900 text-white p-4 rounded-xl font-bold hover:bg-slate-800 active:scale-95 transition-all">${isEdit ? 'Lưu Cập Nhật' : 'Thêm Nguồn Tiền'}</button>
+                    <button onclick="app.saveWallet()" class="w-full mt-4 bg-slate-900 text-white p-4 rounded-xl font-bold hover:bg-slate-800 active:scale-95 transition-all">${isEdit ? 'Lưu Cập Nhật' : 'Lưu Nguồn Tiền'}</button>
                 </div>
             </div>`;
             return html;
         }
 
+        function getReportStats() {
+            const now = new Date();
+            let currStart, currEnd, lastStart, lastEnd, periodLabel = '';
+            const currYear = now.getFullYear(), currMonth = now.getMonth(), currDate = now.getDate();
+
+            if (state.reportPeriod === 'day') {
+                currStart = new Date(currYear, currMonth, currDate, 0, 0, 0); 
+                currEnd = new Date(currYear, currMonth, currDate, 23, 59, 59);
+                lastStart = new Date(currYear, currMonth, currDate - 1, 0, 0, 0); 
+                lastEnd = new Date(currYear, currMonth, currDate - 1, 23, 59, 59);
+                periodLabel = 'Hôm nay vs Hôm qua';
+            } else if (state.reportPeriod === 'week') {
+                const dayOfWeek = now.getDay() === 0 ? 7 : now.getDay();
+                currStart = new Date(currYear, currMonth, currDate - dayOfWeek + 1, 0, 0, 0);
+                currEnd = new Date(currYear, currMonth, currDate + (7 - dayOfWeek), 23, 59, 59);
+                lastStart = new Date(currStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+                lastEnd = new Date(currEnd.getTime() - 7 * 24 * 60 * 60 * 1000);
+                periodLabel = 'Tuần này vs Tuần trước';
+            } else if (state.reportPeriod === 'month') {
+                currStart = new Date(currYear, currMonth, 1, 0, 0, 0); 
+                currEnd = new Date(currYear, currMonth + 1, 0, 23, 59, 59);
+                lastStart = new Date(currYear, currMonth - 1, 1, 0, 0, 0); 
+                lastEnd = new Date(currYear, currMonth, 0, 23, 59, 59);
+                periodLabel = `Tháng ${currMonth + 1} vs Tháng ${currMonth === 0 ? 12 : currMonth}`;
+            } else if (state.reportPeriod === 'year') {
+                currStart = new Date(currYear, 0, 1, 0, 0, 0); 
+                currEnd = new Date(currYear, 11, 31, 23, 59, 59);
+                lastStart = new Date(currYear - 1, 0, 1, 0, 0, 0); 
+                lastEnd = new Date(currYear - 1, 11, 31, 23, 59, 59);
+                periodLabel = `Năm ${currYear} vs Năm ${currYear - 1}`;
+            }
+
+            let currExpense = 0, lastExpense = 0;
+            const categoryDiff = {};
+
+            state.transactions.filter(t => t.type === 'expense').forEach(t => {
+                const txDate = new Date(`${t.date}T${t.time || '12:00'}:00`);
+                const isCurr = txDate >= currStart && txDate <= currEnd;
+                const isLast = txDate >= lastStart && txDate <= lastEnd;
+
+                if (isCurr || isLast) {
+                    if (!categoryDiff[t.categoryId]) categoryDiff[t.categoryId] = { curr: 0, last: 0 };
+                    if (isCurr) { currExpense += t.amount; categoryDiff[t.categoryId].curr += t.amount; }
+                    else { lastExpense += t.amount; categoryDiff[t.categoryId].last += t.amount; }
+                }
+            });
+
+            const details = Object.keys(categoryDiff).map(id => ({
+                category: categories.find(c => c.id === id),
+                curr: categoryDiff[id].curr, last: categoryDiff[id].last,
+                diff: categoryDiff[id].curr - categoryDiff[id].last
+            })).filter(d => d.curr > 0 || d.last > 0).sort((a,b) => b.diff - a.diff);
+
+            return { currExpense, lastExpense, diff: currExpense - lastExpense, details, periodLabel };
+        }
+
         function renderReports() {
             const report = getReportStats();
-            let html = `<div class="p-4 space-y-6 pb-24 fade-in">
+            let html = `<div class="p-4 space-y-6 fade-in">
                 <div class="flex flex-col gap-4 mb-2">
                     <h2 class="text-2xl font-bold text-slate-800">Phân tích chênh lệch</h2>
                     <div class="bg-slate-200 p-1 rounded-xl flex w-full">
@@ -615,7 +722,6 @@
             return html;
         }
 
-        // Object điều khiển ứng dụng
         window.app = {
             render() {
                 if(!state.isDataLoaded) return;
@@ -625,11 +731,19 @@
                 else if (state.activeTab === 'wallets') main.innerHTML = renderWallets();
                 else if (state.activeTab === 'add-wallet') main.innerHTML = renderAddWallet();
                 else if (state.activeTab === 'reports') main.innerHTML = renderReports();
+                else if (state.activeTab === 'wallet-details') main.innerHTML = renderWalletDetails();
 
+                // Cập nhật trạng thái màu sắc của Bottom Navigation
                 ['home', 'wallets', 'reports'].forEach(tab => {
                     const el = document.getElementById(`nav-${tab}`);
                     if (!el) return;
-                    if (state.activeTab === tab) {
+                    // Bật highlight menu tương ứng, nếu vào các tab con (như wallet-details) thì sáng tab cha
+                    let isActive = state.activeTab === tab;
+                    if (state.activeTab === 'wallet-details' && tab === 'wallets') isActive = true;
+                    if (state.activeTab === 'add-wallet' && tab === 'wallets') isActive = true;
+                    if (state.activeTab === 'add' && tab === 'home') isActive = true;
+
+                    if (isActive) {
                         el.className = 'flex flex-col items-center gap-1 w-16 transition-colors text-indigo-600';
                         el.querySelector('i').classList.add('ph-fill');
                         el.querySelector('i').classList.remove('ph');
@@ -644,6 +758,17 @@
                 state.activeTab = tab;
                 state.isConfirmingDelete = false; 
                 state.confirmingDeleteWalletId = null;
+                // Cuộn lên top khi đổi tab
+                document.getElementById('main-content').scrollTop = 0;
+                this.render();
+            },
+            viewWalletDetails(id) {
+                state.selectedWalletId = id;
+                state.walletFilterPeriod = 'all'; // Mặc định xem tất cả
+                this.setTab('wallet-details');
+            },
+            setWalletFilter(period) {
+                state.walletFilterPeriod = period;
                 this.render();
             },
             openAddTx() {
@@ -695,7 +820,12 @@
                 try {
                     const docRef = doc(db, 'users', state.userId);
                     await setDoc(docRef, { wallets: updatedWallets, transactions: updatedTransactions }, { merge: true });
-                    this.setTab('home');
+                    // Nếu đang ở màn hình chi tiết ví thì quay lại đó, nếu không thì về home
+                    if(state.selectedWalletId && state.selectedWalletId === state.txForm.walletId) {
+                        this.setTab('wallet-details');
+                    } else {
+                        this.setTab('home');
+                    }
                 } catch(e) { console.error("Lỗi lưu DB", e); }
             },
             async deleteTx() {
@@ -715,7 +845,12 @@
                 try {
                     const docRef = doc(db, 'users', state.userId);
                     await setDoc(docRef, { wallets: updatedWallets, transactions: updatedTransactions }, { merge: true });
-                    this.setTab('home');
+                    
+                    if(state.selectedWalletId && state.selectedWalletId === oldTx.walletId) {
+                        this.setTab('wallet-details');
+                    } else {
+                        this.setTab('home');
+                    }
                 } catch(e) { console.error("Lỗi xóa DB", e); }
             },
             simulateAIScan() {
@@ -748,7 +883,10 @@
                 
                 let bal = parseInt(state.walletForm.balance.replace(/,/g,'')) || 0;
                 let lim = parseInt(state.walletForm.limit.replace(/,/g,'')) || 0;
+                // Nếu là thẻ tín dụng, số dư lưu trong DB phải là số âm
                 if(state.walletForm.type === 'credit' && bal > 0) bal = -Math.abs(bal);
+                // Nếu là thẻ ghi nợ/tiền mặt, số dư là dương
+                if(state.walletForm.type !== 'credit') bal = Math.abs(bal);
                 
                 let updatedWallets = [...state.wallets];
 
@@ -813,7 +951,6 @@
             setReportPeriod(period) { state.reportPeriod = period; this.render(); }
         };
 
-        // Khởi tạo Firebase
         async function initFirebase() {
             try {
                 await signInAnonymously(auth);
@@ -821,11 +958,9 @@
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         try {
-                            state.userId = "huychu_master_database"; 
-                            
                             const docRef = doc(db, 'users', state.userId);
                             
-                            // Lấy dữ liệu lần đầu
+                            // 1. Lấy dữ liệu ngay lập tức để mở app nhanh
                             const docSnap = await getDoc(docRef);
                             
                             if (docSnap.exists()) {
@@ -833,7 +968,6 @@
                                 state.wallets = data.wallets || [];
                                 state.transactions = data.transactions || [];
                             } else {
-                                // Tạo mới nếu chưa có
                                 const initW = [ { id: 'w1', name: 'Tiền mặt', type: 'cash', balance: 0, status: 'active' } ];
                                 await setDoc(docRef, { wallets: initW, transactions: [] });
                                 state.wallets = initW;
@@ -842,7 +976,6 @@
 
                             state.isDataLoaded = true;
                             
-                            // Tắt loading
                             const loader = document.getElementById('loader');
                             if(loader) {
                                 loader.classList.add('hidden-fade');
@@ -851,7 +984,7 @@
 
                             window.app.render();
 
-                            // Bật realtime sync
+                            // 2. Chạy ngầm lắng nghe Realtime Update
                             onSnapshot(docRef, (snap) => {
                                 if (snap.exists() && state.isDataLoaded) {
                                     const data = snap.data();
@@ -860,8 +993,8 @@
                                     
                                     const syncStatus = document.getElementById('sync-status');
                                     if(syncStatus) {
-                                        syncStatus.classList.remove('bg-emerald-500'); syncStatus.classList.add('bg-indigo-500');
-                                        setTimeout(() => { syncStatus.classList.remove('bg-indigo-500'); syncStatus.classList.add('bg-emerald-500'); }, 500);
+                                        syncStatus.classList.remove('bg-slate-300'); syncStatus.classList.add('bg-emerald-500');
+                                        setTimeout(() => { syncStatus.classList.remove('bg-emerald-500'); syncStatus.classList.add('bg-slate-300'); }, 1000);
                                     }
                                     
                                     window.app.render();
@@ -870,23 +1003,14 @@
 
                         } catch (err) {
                             console.error("Lỗi Firebase:", err);
-                            document.getElementById('loader').innerHTML = `
-                                <div class="p-6 text-center">
-                                    <i class="ph ph-x-circle text-5xl text-rose-500 mb-4"></i>
-                                    <p class="text-rose-600 font-bold mb-2">Lỗi Lấy Dữ Liệu</p>
-                                    <p class="text-sm text-slate-500 break-words">${err.message}</p>
-                                </div>`;
+                            document.getElementById('loader-text').innerHTML = `<span class="text-rose-500 font-bold">Lỗi Quyền Truy Cập!</span><br/><span class="text-xs">Vui lòng vào Rules Firebase để cấp quyền 'allow read, write: if true;'</span>`;
+                            document.querySelector('#loader i').className = "ph ph-warning-circle text-5xl text-rose-500 mb-4";
                         }
                     }
                 });
             } catch (error) {
                 console.error("Lỗi Auth:", error);
-                document.getElementById('loader').innerHTML = `
-                    <div class="p-6 text-center">
-                        <i class="ph ph-x-circle text-5xl text-rose-500 mb-4"></i>
-                        <p class="text-rose-600 font-bold mb-2">Lỗi Đăng Nhập Firebase</p>
-                        <p class="text-sm text-slate-500 break-words">${error.message}</p>
-                    </div>`;
+                document.getElementById('loader-text').innerHTML = `<span class="text-rose-500 font-bold">Lỗi Xác Thực</span>`;
             }
         }
 
