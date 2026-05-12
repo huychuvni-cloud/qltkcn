@@ -855,30 +855,38 @@
                             
                             const docRef = doc(db, 'users', state.userId);
                             
-                            // 1. Kiểm tra xem file dữ liệu của Huy đã tồn tại trên Cloud chưa
+                            // 1. Lấy dữ liệu lần đầu (Không dùng onSnapshot ngay để bắt lỗi)
                             const docSnap = await getDoc(docRef);
                             
-                            // 2. Nếu chưa có (người dùng mới), tạo file trắng với 1 ví Tiền mặt
-                            if (!docSnap.exists()) {
+                            if (docSnap.exists()) {
+                                const data = docSnap.data();
+                                state.wallets = data.wallets || [];
+                                state.transactions = data.transactions || [];
+                            } else {
+                                // 2. Nếu chưa có (người dùng mới), tạo file trắng
                                 const initW = [ { id: 'w1', name: 'Tiền mặt', type: 'cash', balance: 0, status: 'active' } ];
                                 await setDoc(docRef, { wallets: initW, transactions: [] });
+                                state.wallets = initW;
+                                state.transactions = [];
                             }
 
-                            // 3. Bắt đầu lắng nghe sự thay đổi (Real-time Sync)
-                            onSnapshot(docRef, (docSnap) => {
-                                if (docSnap.exists()) {
-                                    const data = docSnap.data();
+                            state.isDataLoaded = true;
+                            
+                            // Tắt màn hình loading
+                            const loader = document.getElementById('loader');
+                            if(loader) {
+                                loader.classList.add('hidden-fade');
+                                setTimeout(() => loader.style.display = 'none', 300);
+                            }
+
+                            window.app.render();
+
+                            // 3. Bắt đầu lắng nghe sự thay đổi (Real-time Sync) SAU KHI đã tải thành công lần đầu
+                            onSnapshot(docRef, (snap) => {
+                                if (snap.exists() && state.isDataLoaded) { // Chỉ update nếu đã load lần đầu
+                                    const data = snap.data();
                                     state.wallets = data.wallets || [];
                                     state.transactions = data.transactions || [];
-                                    
-                                    state.isDataLoaded = true;
-                                    
-                                    // Tắt màn hình loading khi có dữ liệu
-                                    const loader = document.getElementById('loader');
-                                    if(loader) {
-                                        loader.classList.add('hidden-fade');
-                                        setTimeout(() => loader.style.display = 'none', 300);
-                                    }
                                     
                                     // Chớp đèn báo đồng bộ
                                     const syncStatus = document.getElementById('sync-status');
@@ -890,30 +898,28 @@
                                     window.app.render();
                                 }
                             }, (error) => {
-                                // Lỗi khi đang lắng nghe dữ liệu
-                                console.error("Lỗi đồng bộ Firestore:", error);
-                                document.getElementById('loader').innerHTML = `
-                                    <div class="p-6 text-center">
-                                        <i class="ph ph-warning text-5xl text-rose-500 mb-4"></i>
-                                        <p class="text-rose-600 font-bold mb-2">Lỗi Lắng Nghe Dữ Liệu</p>
-                                        <p class="text-sm text-slate-500">${error.message}</p>
-                                    </div>`;
+                                console.error("Lỗi đồng bộ ngầm Firestore:", error);
                             });
+
                         } catch (err) {
-                            // SỬA Ở ĐÂY: Ép ứng dụng in lỗi khởi tạo ra màn hình thay vì xoay vô tận
-                            console.error("Lỗi truy xuất ban đầu:", err);
+                            console.error("Lỗi lấy dữ liệu:", err);
                             document.getElementById('loader').innerHTML = `
                                 <div class="p-6 text-center">
                                     <i class="ph ph-x-circle text-5xl text-rose-500 mb-4"></i>
-                                    <p class="text-rose-600 font-bold mb-2">Lỗi Kết Nối Máy Chủ</p>
+                                    <p class="text-rose-600 font-bold mb-2">Lỗi Lấy Dữ Liệu</p>
                                     <p class="text-sm text-slate-500 break-words">${err.message}</p>
-                                    <p class="text-[10px] text-slate-400 mt-4">Vui lòng chụp ảnh màn hình này gửi cho Developer</p>
                                 </div>`;
                         }
                     }
                 });
             } catch (error) {
-                console.error("Lỗi khởi tạo Auth:", error);
+                console.error("Lỗi Auth:", error);
+                document.getElementById('loader').innerHTML = `
+                    <div class="p-6 text-center">
+                        <i class="ph ph-x-circle text-5xl text-rose-500 mb-4"></i>
+                        <p class="text-rose-600 font-bold mb-2">Lỗi Xác Thực Đăng Nhập</p>
+                        <p class="text-sm text-slate-500 break-words">${error.message}</p>
+                    </div>`;
             }
         }
 
