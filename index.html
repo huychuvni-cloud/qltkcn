@@ -65,7 +65,15 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-auth.js";
         import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
 
-        // Khởi tạo Firebase từ môi trường hệ thống
+        const firebaseConfig = {
+  apiKey: "AIzaSyACL12yLGdCMLe7GY2rlVbE56mh_HcQEbw",
+  authDomain: "qltkcn.firebaseapp.com",
+  projectId: "qltkcn",
+  storageBucket: "qltkcn.firebasestorage.app",
+  messagingSenderId: "271958756874",
+  appId: "1:271958756874:web:3e8d418df901a5684719f3",
+  measurementId: "G-S72MTV26B8"
+};
         const firebaseConfig = JSON.parse(window.__firebase_config || '{}');
         const appId = window.__app_id || 'qlct-app-id';
         const fbApp = initializeApp(firebaseConfig);
