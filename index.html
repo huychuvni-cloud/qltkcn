@@ -112,7 +112,16 @@
 
         function getStats() {
             let totalBalance = 0, totalExpense = 0, totalIncome = 0;
-            state.wallets.filter(w => w.status !== 'deleted').forEach(w => totalBalance += w.balance);
+            let totalCash = 0, totalCredit = 0;
+
+            state.wallets.filter(w => w.status !== 'deleted').forEach(w => {
+                totalBalance += w.balance;
+                if (w.type === 'credit') {
+                    totalCredit += Math.abs(w.balance); // Tính tổng tiền đang nợ
+                } else {
+                    totalCash += w.balance; // Tính tổng tiền đang có
+                }
+            });
             
             const now = new Date();
             const currMonth = now.getMonth();
@@ -125,7 +134,7 @@
                     if (t.type === 'income') totalIncome += t.amount;
                 }
             });
-            return { totalBalance, totalExpense, totalIncome };
+            return { totalBalance, totalExpense, totalIncome, totalCash, totalCredit };
         }
 
         function getCategoryStats() {
@@ -222,17 +231,36 @@
             const overBudget = stats.totalExpense > stats.totalIncome * 0.7;
 
             let html = `<div class="p-4 space-y-6 fade-in">
-                <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl">
-                    <p class="text-slate-400 text-sm font-medium">Tổng tài sản ròng</p>
-                    <h1 class="text-3xl font-bold mt-1 tracking-tight">${formatVND(stats.totalBalance)}</h1>
-                    <div class="flex justify-between mt-6 pt-4 border-t border-slate-700/50">
-                        <div>
-                            <div class="flex items-center text-emerald-400 text-xs font-semibold mb-1"><i class="ph-bold ph-trend-up mr-1"></i> THU (Tháng này)</div>
-                            <p class="font-semibold text-lg">${formatVND(stats.totalIncome)}</p>
+                <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
+                    <!-- Hiệu ứng màu nền trang trí -->
+                    <div class="absolute -right-6 -top-6 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl"></div>
+                    <div class="absolute -left-6 -bottom-6 w-32 h-32 bg-emerald-500/20 rounded-full blur-2xl"></div>
+                    
+                    <div class="relative z-10">
+                        <p class="text-slate-400 text-sm font-medium">Tổng tài sản ròng</p>
+                        <h1 class="text-3xl font-bold mt-1 tracking-tight">${formatVND(stats.totalBalance)}</h1>
+                        
+                        <!-- Bóc tách Tiền mặt và Nợ thẻ -->
+                        <div class="flex gap-3 mt-4 mb-1">
+                            <div class="bg-slate-800/60 px-3 py-2 rounded-xl border border-slate-700/50 flex-1">
+                                <p class="text-slate-400 text-[10px] uppercase tracking-wider font-semibold mb-0.5">Tiền đang có</p>
+                                <p class="text-emerald-400 font-bold text-sm">${formatVND(stats.totalCash)}</p>
+                            </div>
+                            <div class="bg-slate-800/60 px-3 py-2 rounded-xl border border-slate-700/50 flex-1">
+                                <p class="text-slate-400 text-[10px] uppercase tracking-wider font-semibold mb-0.5">Dư nợ tín dụng</p>
+                                <p class="text-rose-400 font-bold text-sm">${formatVND(stats.totalCredit)}</p>
+                            </div>
                         </div>
-                        <div>
-                            <div class="flex items-center text-rose-400 text-xs font-semibold mb-1"><i class="ph-bold ph-trend-down mr-1"></i> CHI TIÊU</div>
-                            <p class="font-semibold text-lg">${formatVND(stats.totalExpense)}</p>
+
+                        <div class="flex justify-between mt-5 pt-4 border-t border-slate-700/50">
+                            <div>
+                                <div class="flex items-center text-emerald-400 text-xs font-semibold mb-1"><i class="ph-bold ph-trend-up mr-1"></i> THU (Tháng này)</div>
+                                <p class="font-semibold text-lg">${formatVND(stats.totalIncome)}</p>
+                            </div>
+                            <div>
+                                <div class="flex items-center text-rose-400 text-xs font-semibold mb-1"><i class="ph-bold ph-trend-down mr-1"></i> CHI (Tháng này)</div>
+                                <p class="font-semibold text-lg">${formatVND(stats.totalExpense)}</p>
+                            </div>
                         </div>
                     </div>
                 </div>`;
@@ -732,6 +760,7 @@
                     if (user) {
                         try {
                             state.userId = user.uid;
+                            // SỬA LẠI ĐƯỜNG DẪN CHO ĐÚNG CẤU TRÚC CHẴN CỦA FIRESTORE
                             const docRef = doc(db, 'users', user.uid);
                             
                             // Khởi tạo Dữ liệu mẫu nều tài khoản mới tinh
@@ -770,9 +799,9 @@
                                 document.getElementById('loader').innerHTML = `
                                     <div class="p-6 text-center">
                                         <i class="ph ph-warning text-5xl text-rose-500 mb-4"></i>
-                                        <p class="text-rose-600 font-bold mb-2">Không có quyền truy cập Dữ liệu</p>
+                                        <p class="text-rose-600 font-bold mb-2">Lỗi Quyền Truy Cập (Permissions)</p>
                                         <p class="text-sm text-slate-500">Firebase báo lỗi: ${error.message}</p>
-                                        <p class="text-xs text-slate-400 mt-4">Hãy kiểm tra lại Firestore Database hoặc Authentication trong Console.</p>
+                                        <p class="text-xs text-slate-400 mt-4">Cần cập nhật Rules trong Firebase Console.</p>
                                     </div>`;
                             });
                         } catch (err) {
@@ -780,9 +809,9 @@
                             document.getElementById('loader').innerHTML = `
                                 <div class="p-6 text-center">
                                     <i class="ph ph-database text-5xl text-rose-500 mb-4"></i>
-                                    <p class="text-rose-600 font-bold mb-2">Chưa bật Firestore Database</p>
+                                    <p class="text-rose-600 font-bold mb-2">Lỗi Quyền Truy Cập (Permissions)</p>
                                     <p class="text-sm text-slate-500">Chi tiết lỗi: ${err.message}</p>
-                                    <p class="text-xs text-slate-400 mt-4">Vui lòng vào Firebase Console > Build > Firestore Database > Bấm Create (Start in Test mode).</p>
+                                    <p class="text-xs text-slate-400 mt-4">Vui lòng cập nhật Rules trong Firebase Console.</p>
                                 </div>`;
                         }
                     }
