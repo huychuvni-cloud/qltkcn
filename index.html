@@ -87,6 +87,7 @@
             { id: 'c4', name: 'Giải trí', type: 'expense', color: 'bg-purple-500' },
             { id: 'c5', name: 'Lương', type: 'income', color: 'bg-green-500' },
             { id: 'c6', name: 'Thưởng', type: 'income', color: 'bg-emerald-400' },
+            { id: 'c7', name: 'Thu khác', type: 'income', color: 'bg-teal-500' } // Thêm danh mục thu khác
         ];
 
         window.state = {
@@ -94,7 +95,7 @@
             wallets: [],
             transactions: [],
             txForm: { id: null, amount: '', note: '', type: 'expense', categoryId: 'c1', walletId: '', date: '', time: '', hasImage: false },
-            walletForm: { name: '', type: 'cash', balance: '', limit: '' },
+            walletForm: { id: null, name: '', type: 'cash', balance: '', limit: '' }, // Thêm id cho form sửa ví
             reportPeriod: 'month',
             isConfirmingDelete: false,
             confirmingDeleteWalletId: null,
@@ -117,9 +118,9 @@
             state.wallets.filter(w => w.status !== 'deleted').forEach(w => {
                 totalBalance += w.balance;
                 if (w.type === 'credit') {
-                    totalCredit += Math.abs(w.balance); // Tính tổng tiền đang nợ
+                    totalCredit += Math.abs(w.balance); 
                 } else {
-                    totalCash += w.balance; // Tính tổng tiền đang có
+                    totalCash += w.balance; 
                 }
             });
             
@@ -134,7 +135,11 @@
                     if (t.type === 'income') totalIncome += t.amount;
                 }
             });
-            return { totalBalance, totalExpense, totalIncome, totalCash, totalCredit };
+            
+            // Tính tổng chi tiêu gộp (Chi tiêu tháng + Dư nợ tín dụng)
+            const combinedExpense = totalExpense + totalCredit;
+
+            return { totalBalance, totalExpense, totalIncome, totalCash, totalCredit, combinedExpense };
         }
 
         function getCategoryStats() {
@@ -232,7 +237,6 @@
 
             let html = `<div class="p-4 space-y-6 fade-in">
                 <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
-                    <!-- Hiệu ứng màu nền trang trí -->
                     <div class="absolute -right-6 -top-6 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl"></div>
                     <div class="absolute -left-6 -bottom-6 w-32 h-32 bg-emerald-500/20 rounded-full blur-2xl"></div>
                     
@@ -240,7 +244,6 @@
                         <p class="text-slate-400 text-sm font-medium">Tổng tài sản ròng</p>
                         <h1 class="text-3xl font-bold mt-1 tracking-tight">${formatVND(stats.totalBalance)}</h1>
                         
-                        <!-- Bóc tách Tiền mặt và Nợ thẻ -->
                         <div class="flex gap-3 mt-4 mb-1">
                             <div class="bg-slate-800/60 px-3 py-2 rounded-xl border border-slate-700/50 flex-1">
                                 <p class="text-slate-400 text-[10px] uppercase tracking-wider font-semibold mb-0.5">Tiền đang có</p>
@@ -254,12 +257,12 @@
 
                         <div class="flex justify-between mt-5 pt-4 border-t border-slate-700/50">
                             <div>
-                                <div class="flex items-center text-emerald-400 text-xs font-semibold mb-1"><i class="ph-bold ph-trend-up mr-1"></i> THU (Tháng này)</div>
+                                <div class="flex items-center text-emerald-400 text-[11px] font-semibold mb-1 uppercase tracking-wider"><i class="ph-bold ph-trend-up mr-1 text-sm"></i> Tổng thu (Tháng)</div>
                                 <p class="font-semibold text-lg">${formatVND(stats.totalIncome)}</p>
                             </div>
-                            <div>
-                                <div class="flex items-center text-rose-400 text-xs font-semibold mb-1"><i class="ph-bold ph-trend-down mr-1"></i> CHI (Tháng này)</div>
-                                <p class="font-semibold text-lg">${formatVND(stats.totalExpense)}</p>
+                            <div class="text-right">
+                                <div class="flex items-center justify-end text-rose-400 text-[11px] font-semibold mb-1 uppercase tracking-wider"><i class="ph-bold ph-trend-down mr-1 text-sm"></i> Tổng Chi (Gộp Nợ)</div>
+                                <p class="font-semibold text-lg">${formatVND(stats.combinedExpense)}</p>
                             </div>
                         </div>
                     </div>
@@ -284,10 +287,10 @@
                     <div class="w-full bg-slate-100 rounded-full h-2"><div class="${stat.category.color} h-2 rounded-full" style="width: ${stat.percent}%"></div></div>
                 </div>`;
             });
-            if(catStats.length === 0) html += `<p class="text-center text-sm text-slate-400 py-2">Chưa có dữ liệu tháng này.</p>`;
+            if(catStats.length === 0) html += `<p class="text-center text-sm text-slate-400 py-2">Chưa có dữ liệu chi tiêu tháng này.</p>`;
             
             html += `</div></div><div>
-                <h3 class="font-bold text-slate-800 mb-3 flex items-center"><i class="ph-fill ph-calendar-blank mr-2 text-indigo-500 text-lg"></i> Lịch sử chi tiêu</h3>
+                <h3 class="font-bold text-slate-800 mb-3 flex items-center"><i class="ph-fill ph-calendar-blank mr-2 text-indigo-500 text-lg"></i> Lịch sử giao dịch</h3>
                 <div class="space-y-4">`;
 
             grouped.forEach(group => {
@@ -320,7 +323,7 @@
                 });
                 html += `</div></div>`;
             });
-            if(grouped.length === 0) html += `<p class="text-center text-slate-400 text-sm">Chưa có giao dịch nào.</p>`;
+            if(grouped.length === 0) html += `<p class="text-center text-slate-400 text-sm py-4">Chưa có giao dịch nào.</p>`;
             return html + `</div></div></div>`;
         }
 
@@ -332,7 +335,7 @@
             let html = `<div class="p-4 bg-slate-50 pb-24 fade-in">
                 <div class="flex items-center justify-between mb-6">
                     <h2 class="text-2xl font-bold text-slate-800">${isEdit ? 'Sửa giao dịch' : 'Thêm giao dịch'}</h2>
-                    ${isEdit ? `<button onclick="app.setTab('home')" class="text-slate-500 text-sm font-semibold p-2 bg-slate-200 rounded-lg">Hủy bỏ</button>` : ''}
+                    ${isEdit ? `<button onclick="app.setTab('home')" class="text-slate-500 text-sm font-semibold p-2 bg-slate-200 rounded-lg hover:bg-slate-300">Hủy bỏ</button>` : ''}
                 </div>`;
 
             if (!isEdit) {
@@ -410,7 +413,7 @@
                 </button>`;
             }
             html += `<button onclick="app.saveTx()" class="${isEdit && state.isConfirmingDelete ? 'hidden' : 'flex-1'} bg-slate-900 text-white p-4 rounded-xl font-bold hover:bg-slate-800 active:scale-95 transition-all">
-                ${isEdit ? 'Lưu Lên Đám Mây' : 'Lưu Lên Đám Mây'}
+                ${isEdit ? 'Lưu Cập Nhật' : 'Lưu Giao Dịch'}
             </button></div></div></div>`;
             return html;
         }
@@ -423,15 +426,20 @@
                 const isLocked = w.status === 'locked';
                 const isConfirmingDelete = state.confirmingDeleteWalletId === w.id;
 
-                html += `<div class="bg-white p-5 rounded-2xl shadow-sm border ${isLocked ? 'border-slate-200 opacity-60 bg-slate-50' : 'border-slate-100'} transition-all relative overflow-hidden">
+                html += `<div class="bg-white p-5 rounded-2xl shadow-sm border ${isLocked ? 'border-slate-200 opacity-60 bg-slate-50' : 'border-slate-100'} transition-all relative overflow-hidden group">
                     ${isLocked ? `<div class="absolute top-3 right-4 text-xs font-bold text-slate-400 bg-slate-200 px-2 py-0.5 rounded-full"><i class="ph ph-lock-key"></i> Đã Khóa</div>` : ''}
                     
-                    <div class="flex items-center gap-3 mb-4">
-                        <div class="p-3 bg-slate-100 rounded-xl text-slate-600 text-xl">${getWalletIcon(w.type)}</div>
-                        <div>
-                            <h3 class="font-bold ${isLocked ? 'text-slate-500 line-through' : 'text-slate-800'}">${w.name}</h3>
-                            <p class="text-xs text-slate-500 uppercase">${w.type === 'credit' ? 'Thẻ tín dụng' : 'Tài khoản thường'}</p>
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="p-3 bg-slate-100 rounded-xl text-slate-600 text-xl">${getWalletIcon(w.type)}</div>
+                            <div>
+                                <h3 class="font-bold ${isLocked ? 'text-slate-500 line-through' : 'text-slate-800'}">${w.name}</h3>
+                                <p class="text-xs text-slate-500 uppercase">${w.type === 'credit' ? 'Thẻ tín dụng' : 'Tài khoản thường'}</p>
+                            </div>
                         </div>
+                        <button onclick="app.editWallet('${w.id}')" class="text-slate-400 hover:text-indigo-600 p-2 rounded-lg bg-slate-50 hover:bg-indigo-50 transition-colors">
+                            <i class="ph-bold ph-pencil-simple text-lg"></i>
+                        </button>
                     </div>
                     <div class="bg-slate-50 p-3 rounded-xl mb-3 border border-slate-100">
                         <p class="text-sm text-slate-500 mb-1">${w.type === 'credit' ? 'Dư nợ hiện tại' : 'Số dư'}</p>
@@ -454,7 +462,7 @@
                  html += `<p class="text-center text-sm text-slate-400 py-4">Chưa có nguồn tiền nào.</p>`;
             }
 
-            html += `<button onclick="app.setTab('add-wallet')" class="w-full py-4 border-2 border-dashed border-slate-300 text-slate-500 font-semibold rounded-2xl hover:bg-slate-50 transition-colors flex items-center justify-center gap-2">
+            html += `<button onclick="app.openAddWallet()" class="w-full py-4 border-2 border-dashed border-slate-300 text-slate-500 font-semibold rounded-2xl hover:bg-slate-50 transition-colors flex items-center justify-center gap-2">
                 <i class="ph-bold ph-plus-circle text-xl"></i> Thêm tài khoản mới
             </button></div>`;
             return html;
@@ -462,10 +470,12 @@
 
         function renderAddWallet() {
             const form = state.walletForm;
+            const isEdit = !!form.id;
+
             let html = `<div class="p-4 bg-slate-50 pb-24 fade-in">
                 <div class="flex items-center justify-between mb-6">
-                    <h2 class="text-2xl font-bold text-slate-800">Thêm nguồn tiền</h2>
-                    <button onclick="app.setTab('wallets')" class="text-slate-500 text-sm font-semibold p-2 bg-slate-200 rounded-lg">Hủy bỏ</button>
+                    <h2 class="text-2xl font-bold text-slate-800">${isEdit ? 'Sửa nguồn tiền' : 'Thêm nguồn tiền'}</h2>
+                    <button onclick="app.setTab('wallets')" class="text-slate-500 text-sm font-semibold p-2 bg-slate-200 rounded-lg hover:bg-slate-300">Hủy bỏ</button>
                 </div>
                 <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 space-y-5">
                     <div>
@@ -483,9 +493,10 @@
                     <div>
                         <label class="text-xs font-semibold text-slate-500 uppercase block mb-2">${form.type === 'credit' ? 'Dư nợ hiện tại' : 'Số dư ban đầu'}</label>
                         <div class="relative">
-                            <input type="number" id="w-balance" value="${form.balance}" oninput="app.updateWalletForm()" placeholder="0" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none text-lg font-bold text-slate-800" />
+                            <input type="number" id="w-balance" value="${Math.abs(form.balance)}" oninput="app.updateWalletForm()" placeholder="0" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none text-lg font-bold text-slate-800" />
                             <span class="absolute right-4 top-3.5 text-slate-400 font-medium text-sm">VND</span>
                         </div>
+                        <p class="text-[10px] text-slate-400 mt-1 italic">${isEdit ? 'Lưu ý: Thay đổi số dư tại đây sẽ không làm ảnh hưởng đến các giao dịch cũ.' : 'Nhập số tiền hiện có.'}</p>
                     </div>
                     ${form.type === 'credit' ? `
                     <div class="fade-in">
@@ -495,7 +506,7 @@
                             <span class="absolute right-4 top-3.5 text-slate-400 font-medium text-sm">VND</span>
                         </div>
                     </div>` : ''}
-                    <button onclick="app.saveWallet()" class="w-full mt-4 bg-slate-900 text-white p-4 rounded-xl font-bold hover:bg-slate-800 active:scale-95 transition-all">Lưu Lên Đám Mây</button>
+                    <button onclick="app.saveWallet()" class="w-full mt-4 bg-slate-900 text-white p-4 rounded-xl font-bold hover:bg-slate-800 active:scale-95 transition-all">${isEdit ? 'Lưu Cập Nhật' : 'Thêm Nguồn Tiền'}</button>
                 </div>
             </div>`;
             return html;
@@ -625,13 +636,11 @@
             setTxCategory(id) { this.updateFormState(); state.txForm.categoryId = id; this.render(); },
             toggleTxImage() { this.updateFormState(); state.txForm.hasImage = !state.txForm.hasImage; this.render(); },
             
-            // LƯU LÊN FIREBASE ĐÁM MÂY
             async saveTx() {
                 this.updateFormState();
                 if (!state.txForm.amount || !state.txForm.walletId || !state.userId) return;
                 const amt = parseInt(state.txForm.amount.replace(/,/g, ''));
                 
-                // Logic bù trừ Ví
                 let updatedWallets = [...state.wallets];
                 if (state.txForm.id) {
                     const oldTx = state.transactions.find(t => t.id === state.txForm.id);
@@ -645,7 +654,6 @@
                 let updatedTransactions = state.transactions.filter(t => t.id !== state.txForm.id);
                 updatedTransactions.push(txData);
 
-                // Lưu lên Firebase
                 try {
                     const docRef = doc(db, 'users', state.userId);
                     await setDoc(docRef, { wallets: updatedWallets, transactions: updatedTransactions }, { merge: true });
@@ -682,6 +690,19 @@
                 }, 1500);
             },
 
+            openAddWallet() {
+                state.walletForm = { id: null, name: '', type: 'cash', balance: '', limit: '' };
+                this.setTab('add-wallet');
+            },
+
+            editWallet(id) {
+                const w = state.wallets.find(wallet => wallet.id === id);
+                if (w) {
+                    state.walletForm = { ...w, balance: Math.abs(w.balance).toString() }; // Chuyển số dư thành số dương để dễ edit
+                    this.setTab('add-wallet');
+                }
+            },
+
             updateWalletForm() {
                 state.walletForm.name = document.getElementById('w-name')?.value || '';
                 state.walletForm.balance = document.getElementById('w-balance')?.value || '';
@@ -691,18 +712,36 @@
             
             async saveWallet() {
                 this.updateWalletForm();
-                if(!state.walletForm.name || !state.walletForm.balance || !state.userId) return;
-                let bal = parseInt(state.walletForm.balance.replace(/,/g,''));
+                if(!state.walletForm.name || state.walletForm.balance === '' || !state.userId) return;
+                
+                let bal = parseInt(state.walletForm.balance.replace(/,/g,'')) || 0;
                 let lim = parseInt(state.walletForm.limit.replace(/,/g,'')) || 0;
                 if(state.walletForm.type === 'credit' && bal > 0) bal = -Math.abs(bal);
                 
-                const newWallet = { id: `w${Date.now()}`, name: state.walletForm.name, type: state.walletForm.type, balance: bal, limit: lim, status: 'active' };
-                const updatedWallets = [...state.wallets, newWallet];
+                let updatedWallets = [...state.wallets];
+
+                if (state.walletForm.id) {
+                    // Update existing
+                    const idx = updatedWallets.findIndex(w => w.id === state.walletForm.id);
+                    if (idx > -1) {
+                        updatedWallets[idx] = { 
+                            ...updatedWallets[idx], 
+                            name: state.walletForm.name, 
+                            type: state.walletForm.type, 
+                            balance: bal, 
+                            limit: lim 
+                        };
+                    }
+                } else {
+                    // Add new
+                    const newWallet = { id: `w${Date.now()}`, name: state.walletForm.name, type: state.walletForm.type, balance: bal, limit: lim, status: 'active' };
+                    updatedWallets.push(newWallet);
+                }
 
                 try {
                     const docRef = doc(db, 'users', state.userId);
                     await setDoc(docRef, { wallets: updatedWallets }, { merge: true });
-                    state.walletForm = { name: '', type: 'cash', balance: '', limit: '' };
+                    state.walletForm = { id: null, name: '', type: 'cash', balance: '', limit: '' };
                     this.setTab('wallets');
                 } catch(e) { console.error("Lỗi lưu Ví", e); }
             },
@@ -749,7 +788,6 @@
 
         async function initFirebase() {
             try {
-                // Xác thực ẩn danh hoặc bằng Token
                 if (window.__initial_auth_token) {
                     await signInWithCustomToken(auth, window.__initial_auth_token);
                 } else {
@@ -760,24 +798,20 @@
                     if (user) {
                         try {
                             state.userId = user.uid;
-                            // SỬA LẠI ĐƯỜNG DẪN CHO ĐÚNG CẤU TRÚC CHẴN CỦA FIRESTORE
                             const docRef = doc(db, 'users', user.uid);
                             
-                            // Khởi tạo Dữ liệu mẫu nều tài khoản mới tinh
                             const docSnap = await getDoc(docRef);
                             if (!docSnap.exists()) {
                                 const initW = [ { id: 'w1', name: 'Tiền mặt', type: 'cash', balance: 0, status: 'active' } ];
                                 await setDoc(docRef, { wallets: initW, transactions: [] });
                             }
 
-                            // Lắng nghe thay đổi Real-time
                             onSnapshot(docRef, (docSnap) => {
                                 if (docSnap.exists()) {
                                     const data = docSnap.data();
                                     state.wallets = data.wallets || [];
                                     state.transactions = data.transactions || [];
                                     
-                                    // Tắt loader, hiển thị UI
                                     state.isDataLoaded = true;
                                     const loader = document.getElementById('loader');
                                     if(loader) {
@@ -785,7 +819,6 @@
                                         setTimeout(() => loader.style.display = 'none', 300);
                                     }
                                     
-                                    // Hiệu ứng nháy đèn Sync
                                     const syncStatus = document.getElementById('sync-status');
                                     if(syncStatus) {
                                         syncStatus.classList.remove('bg-emerald-500'); syncStatus.classList.add('bg-indigo-500');
@@ -801,36 +834,19 @@
                                         <i class="ph ph-warning text-5xl text-rose-500 mb-4"></i>
                                         <p class="text-rose-600 font-bold mb-2">Lỗi Quyền Truy Cập (Permissions)</p>
                                         <p class="text-sm text-slate-500">Firebase báo lỗi: ${error.message}</p>
-                                        <p class="text-xs text-slate-400 mt-4">Cần cập nhật Rules trong Firebase Console.</p>
                                     </div>`;
                             });
                         } catch (err) {
                             console.error("Lỗi truy xuất ban đầu:", err);
-                            document.getElementById('loader').innerHTML = `
-                                <div class="p-6 text-center">
-                                    <i class="ph ph-database text-5xl text-rose-500 mb-4"></i>
-                                    <p class="text-rose-600 font-bold mb-2">Lỗi Quyền Truy Cập (Permissions)</p>
-                                    <p class="text-sm text-slate-500">Chi tiết lỗi: ${err.message}</p>
-                                    <p class="text-xs text-slate-400 mt-4">Vui lòng cập nhật Rules trong Firebase Console.</p>
-                                </div>`;
                         }
                     }
                 });
             } catch (error) {
                 console.error("Lỗi khởi tạo Auth:", error);
-                document.getElementById('loader').innerHTML = `
-                    <div class="p-6 text-center">
-                        <i class="ph ph-user-circle-minus text-5xl text-rose-500 mb-4"></i>
-                        <p class="text-rose-600 font-bold mb-2">Chưa bật Đăng nhập (Authentication)</p>
-                        <p class="text-sm text-slate-500">Chi tiết lỗi: ${error.message}</p>
-                        <p class="text-xs text-slate-400 mt-4">Vui lòng vào Firebase Console > Build > Authentication > Sign-in method > Bật Anonymous.</p>
-                    </div>`;
             }
         }
 
-        // Kích hoạt
         initFirebase();
-
     </script>
 </body>
 </html>
